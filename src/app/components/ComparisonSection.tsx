@@ -1,13 +1,8 @@
 import { useMemo, useState } from 'react';
-import { IDSSData } from '../utils/csvParser';
+import { IDSSData, calculateAverage } from '../utils/csvParser';
 import {
   BarChart,
   Bar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -18,15 +13,13 @@ import {
   Line
 } from 'recharts';
 
-
 type IndicatorKey = 'idss' | 'idqs' | 'idga' | 'idsm' | 'idgr';
 
 interface ComparisonSectionProps {
   snapshotData: IDSSData[];
+  comparisonTargets: IDSSData[];
   historyData: IDSSData[];
-  groupData: IDSSData[];
-  selectedModalidades: string[];
-  selectedPortes: string[];
+  selectedYear?: string;
   selectedOperadora?: IDSSData;
 }
 
@@ -37,42 +30,6 @@ const INDICATORS: Array<{ key: IndicatorKey; label: string }> = [
   { key: 'idsm', label: 'IDSM' },
   { key: 'idgr', label: 'IDGR' }
 ];
-
-const COLORS = [
-  'var(--brand-wine-dark)',
-  'var(--brand-wine)',
-  'var(--brand-wine-light)',
-  'var(--brand-roxo)',
-  'var(--brand-peach)',
-  'var(--brand-cyan)',
-  'var(--brand-goiaba)',
-  'var(--brand-wine-ultra)',
-  '#bf9cff'
-];
-
-const GROUP_COLORS = [
-  'var(--brand-goiaba)',
-  'var(--brand-cyan)',
-  'var(--brand-peach)',
-  'var(--brand-roxo)'
-];
-
-const getLatestByOperadora = (data: IDSSData[]) => {
-  const grouped = new Map<string, IDSSData>();
-
-  data.forEach(item => {
-    if (!item.reg_ans) return;
-    const currentYear = Number.parseInt(item.ano, 10) || 0;
-    const existing = grouped.get(item.reg_ans);
-    const existingYear = existing ? Number.parseInt(existing.ano, 10) || 0 : 0;
-
-    if (!existing || existingYear < currentYear) {
-      grouped.set(item.reg_ans, item);
-    }
-  });
-
-  return grouped;
-};
 
 const getShortName = (razaoSocial: string) => {
   const parts = razaoSocial.trim().split(/\s+/);
@@ -104,251 +61,70 @@ const buildAverageByYear = (data: IDSSData[], indicator: IndicatorKey) => {
   return result;
 };
 
-const buildAverageSnapshot = (data: IDSSData[], indicator: IndicatorKey) => {
-  const values = data
-    .map(item => item[indicator])
-    .filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
-  if (values.length === 0) return 0;
-  return parseFloat((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(4));
-};
-
 export function ComparisonSection({
   snapshotData,
+  comparisonTargets,
   historyData,
-  groupData,
-  selectedModalidades,
-  selectedPortes,
+  selectedYear,
   selectedOperadora
 }: ComparisonSectionProps) {
   const [selectedIndicator, setSelectedIndicator] = useState<IndicatorKey>('idss');
-  const [showModalidadeComparison, setShowModalidadeComparison] = useState(true);
-  const [showPorteComparison, setShowPorteComparison] = useState(true);
 
-  const snapshotMap = useMemo(() => getLatestByOperadora(snapshotData), [snapshotData]);
-  const historyMap = useMemo(() => getLatestByOperadora(historyData), [historyData]);
-  const selectedOperadoras = selectedOperadora?.reg_ans ? [selectedOperadora.reg_ans] : [];
-
-  const comparisonRecords = useMemo(() => {
-    return selectedOperadoras
-      .map(regAns => snapshotMap.get(regAns) || historyMap.get(regAns))
-      .filter((item): item is IDSSData => Boolean(item));
-  }, [selectedOperadoras, snapshotMap, historyMap]);
-
-  const snapshotLabel = useMemo(() => {
-    const yearsFromRecords = new Set(comparisonRecords.map(item => item.ano).filter(Boolean));
-    const yearsFromSnapshot = new Set(snapshotData.map(item => item.ano).filter(Boolean));
-    const years = yearsFromRecords.size > 0 ? yearsFromRecords : yearsFromSnapshot;
-
-    if (years.size === 1) {
-      return Array.from(years)[0];
+  const selectedSnapshot = useMemo(() => {
+    if (!selectedOperadora?.reg_ans) return undefined;
+    const matchInSnapshot = snapshotData.find(item => item.reg_ans === selectedOperadora.reg_ans);
+    if (matchInSnapshot) return matchInSnapshot;
+    if (selectedYear) {
+      return historyData.find(item => item.reg_ans === selectedOperadora.reg_ans && item.ano === selectedYear);
     }
-    if (years.size > 1) {
-      return 'Ultimo ano disponivel';
-    }
-    return '';
-  }, [comparisonRecords, snapshotData]);
+    return undefined;
+  }, [snapshotData, historyData, selectedOperadora, selectedYear]);
 
-  const comparisonData = useMemo(() => {
-    return comparisonRecords.map(item => {
-      const shortName = getShortName(item.razao_social);
+  const comparisonIndices = useMemo(() => {
+    return INDICATORS.map(indicator => {
+      const selectedValue = selectedSnapshot?.[indicator.key] ?? null;
       return {
-        name: shortName,
-        displayName: shortName,
-        fullName: `${item.razao_social} (Nº ANS ${item.reg_ans})`,
-        seriesKey: item.reg_ans,
-        idss: item.idss ?? 0,
-        idqs: item.idqs ?? 0,
-        idga: item.idga ?? 0,
-        idsm: item.idsm ?? 0,
-        idgr: item.idgr ?? 0,
-        reg_ans: item.reg_ans,
-        ano: item.ano
+        index: indicator.label,
+        operadora: selectedValue,
+        media: calculateAverage(comparisonTargets, indicator.key)
       };
     });
-  }, [comparisonRecords]);
+  }, [comparisonTargets, selectedSnapshot]);
 
-  const groupSnapshotData = useMemo(() => {
-    const groups: Array<{
-      name: string;
-      displayName: string;
-      fullName: string;
-      seriesKey: string;
-      idss: number;
-      idqs: number;
-      idga: number;
-      idsm: number;
-      idgr: number;
-      ano: string;
-    }> = [];
+  const groupAverageByYear = useMemo(() => {
+    return buildAverageByYear(historyData, selectedIndicator);
+  }, [historyData, selectedIndicator]);
 
-    selectedModalidades.forEach(modalidade => {
-      const filtered = snapshotData.filter(item => item.modalidade_operadora === modalidade);
-      if (filtered.length === 0) return;
-      const label = `Modalidade: ${modalidade}`;
-      groups.push({
-        name: label,
-        displayName: label,
-        fullName: label,
-        seriesKey: `modalidade:${modalidade}`,
-        idss: buildAverageSnapshot(filtered, 'idss'),
-        idqs: buildAverageSnapshot(filtered, 'idqs'),
-        idga: buildAverageSnapshot(filtered, 'idga'),
-        idsm: buildAverageSnapshot(filtered, 'idsm'),
-        idgr: buildAverageSnapshot(filtered, 'idgr'),
-        ano: snapshotLabel
-      });
-    });
-
-    selectedPortes.forEach(porte => {
-      const filtered = snapshotData.filter(item => item.porte === porte);
-      if (filtered.length === 0) return;
-      const label = `Porte: ${porte}`;
-      groups.push({
-        name: label,
-        displayName: label,
-        fullName: label,
-        seriesKey: `porte:${porte}`,
-        idss: buildAverageSnapshot(filtered, 'idss'),
-        idqs: buildAverageSnapshot(filtered, 'idqs'),
-        idga: buildAverageSnapshot(filtered, 'idga'),
-        idsm: buildAverageSnapshot(filtered, 'idsm'),
-        idgr: buildAverageSnapshot(filtered, 'idgr'),
-        ano: snapshotLabel
-      });
-    });
-
-    return groups;
-  }, [snapshotData, selectedModalidades, selectedPortes, snapshotLabel]);
-
-  const combinedComparisonData = useMemo(() => {
-    return [...comparisonData, ...groupSnapshotData];
-  }, [comparisonData, groupSnapshotData]);
-
-  const radarComparisonData = useMemo(() => {
-    if (combinedComparisonData.length === 0) return [];
-
-    return [
-      {
-        subject: 'IDQS',
-        ...combinedComparisonData.reduce((acc, item) => ({ ...acc, [item.seriesKey]: item.idqs }), {})
-      },
-      {
-        subject: 'IDGA',
-        ...combinedComparisonData.reduce((acc, item) => ({ ...acc, [item.seriesKey]: item.idga }), {})
-      },
-      {
-        subject: 'IDSM',
-        ...combinedComparisonData.reduce((acc, item) => ({ ...acc, [item.seriesKey]: item.idsm }), {})
-      },
-      {
-        subject: 'IDGR',
-        ...combinedComparisonData.reduce((acc, item) => ({ ...acc, [item.seriesKey]: item.idgr }), {})
-      }
-    ];
-  }, [combinedComparisonData]);
-
-  const operadoraTimelineValues = useMemo(() => {
-    const selectedSet = new Set(selectedOperadoras);
-    const values: Record<string, Record<string, number>> = {};
-
-    historyData.forEach(item => {
-      if (!selectedSet.has(item.reg_ans)) return;
-      const value = item[selectedIndicator];
-      if (typeof value !== 'number' || Number.isNaN(value)) return;
-      if (!values[item.reg_ans]) {
-        values[item.reg_ans] = {};
-      }
-      values[item.reg_ans][item.ano] = value;
-    });
-
-    return values;
-  }, [historyData, selectedOperadoras, selectedIndicator]);
-
-  const modalidadeSeries = useMemo(() => {
-    if (!showModalidadeComparison || selectedModalidades.length === 0) return [];
-    return selectedModalidades
-      .map((modalidade, index) => {
-        const values = buildAverageByYear(
-          groupData.filter(item => item.modalidade_operadora === modalidade),
-          selectedIndicator
-        );
-        return {
-          key: `modalidade:${modalidade}`,
-          label: `Modalidade: ${modalidade}`,
-          color: GROUP_COLORS[index % GROUP_COLORS.length],
-          values
-        };
-      })
-      .filter(series => series.values.size > 0);
-  }, [groupData, selectedModalidades, selectedIndicator, showModalidadeComparison]);
-
-  const porteSeries = useMemo(() => {
-    if (!showPorteComparison || selectedPortes.length === 0) return [];
-    return selectedPortes
-      .map((porte, index) => {
-        const values = buildAverageByYear(
-          groupData.filter(item => item.porte === porte),
-          selectedIndicator
-        );
-        return {
-          key: `porte:${porte}`,
-          label: `Porte: ${porte}`,
-          color: GROUP_COLORS[(index + modalidadeSeries.length) % GROUP_COLORS.length],
-          values
-        };
-      })
-      .filter(series => series.values.size > 0);
-  }, [groupData, selectedPortes, selectedIndicator, showPorteComparison, modalidadeSeries.length]);
+  const selectedTimeline = useMemo(() => {
+    if (!selectedOperadora?.reg_ans) return [];
+    return historyData
+      .filter(item => item.reg_ans === selectedOperadora.reg_ans)
+      .map(item => ({ ano: item.ano, value: item[selectedIndicator] ?? 0 }));
+  }, [historyData, selectedIndicator, selectedOperadora]);
 
   const timelineData = useMemo(() => {
     const years = new Set<string>();
-    Object.values(operadoraTimelineValues).forEach(values => {
-      Object.keys(values).forEach(year => years.add(year));
-    });
-    modalidadeSeries.forEach(series => {
-      series.values.forEach((_value, year) => years.add(year));
-    });
-    porteSeries.forEach(series => {
-      series.values.forEach((_value, year) => years.add(year));
-    });
+    selectedTimeline.forEach(item => years.add(item.ano));
+    groupAverageByYear.forEach((_value, year) => years.add(year));
 
     return Array.from(years)
       .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10))
       .map(year => {
         const point: Record<string, number | string> = { ano: year };
-        selectedOperadoras.forEach(regAns => {
-          const value = operadoraTimelineValues[regAns]?.[year];
-          if (typeof value === 'number') {
-            point[regAns] = value;
-          }
-        });
-        modalidadeSeries.forEach(series => {
-          const value = series.values.get(year);
-          if (typeof value === 'number') {
-            point[series.key] = value;
-          }
-        });
-        porteSeries.forEach(series => {
-          const value = series.values.get(year);
-          if (typeof value === 'number') {
-            point[series.key] = value;
-          }
-        });
+        const selectedValue = selectedTimeline.find(item => item.ano === year)?.value;
+        if (typeof selectedValue === 'number') {
+          point.selected = selectedValue;
+        }
+        const groupValue = groupAverageByYear.get(year);
+        if (typeof groupValue === 'number') {
+          point.group = groupValue;
+        }
         return point;
       });
-  }, [operadoraTimelineValues, selectedOperadoras, modalidadeSeries, porteSeries]);
+  }, [groupAverageByYear, selectedTimeline]);
 
-  const operadoraLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    comparisonRecords.forEach(item => {
-      map.set(item.reg_ans, getShortName(item.razao_social));
-    });
-    return map;
-  }, [comparisonRecords]);
-
-  const shouldShowGroupControls = selectedModalidades.length > 0 || selectedPortes.length > 0;
-  const hasComparisonTargets = combinedComparisonData.length > 0;
-  const hasTimelineSeries = selectedOperadoras.length > 0 || modalidadeSeries.length > 0 || porteSeries.length > 0;
+  const hasComparisonTargets = comparisonTargets.length > 0;
+  const selectedLabel = selectedOperadora?.razao_social ? getShortName(selectedOperadora.razao_social) : '';
 
   return (
     <div className="space-y-6">
@@ -361,7 +137,7 @@ export function ComparisonSection({
             </div>
           ) : (
             <p className="text-sm text-gray-600">
-              Selecione uma operadora na tabela ou use Modalidade/Porte para comparar medias.
+              Ajuste os filtros para montar o grupo de comparacao.
             </p>
           )}
           <div className="flex flex-wrap gap-2 text-xs text-gray-600">
@@ -375,17 +151,22 @@ export function ComparisonSection({
                 {selectedOperadora.porte}
               </span>
             )}
+            {selectedOperadora?.uniodonto && (
+              <span className="px-2 py-1 rounded-full bg-[var(--brand-roxo-soft)] text-[var(--brand-wine-ultra)]">
+                Uniodonto: {selectedOperadora.uniodonto}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {hasComparisonTargets || hasTimelineSeries ? (
+      {hasComparisonTargets ? (
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
               <div>
                 <h3 className="text-lg text-gray-800">Comparacao Ano a Ano</h3>
-                <p className="text-sm text-gray-500">Evolucao do indicador selecionado por operadora e grupos.</p>
+                <p className="text-sm text-gray-500">Operadora selecionada vs media do grupo filtrado.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {INDICATORS.map(indicator => (
@@ -404,33 +185,6 @@ export function ComparisonSection({
               </div>
             </div>
 
-            {shouldShowGroupControls && (
-              <div className="flex flex-wrap items-center gap-4 mb-4 text-sm text-gray-600">
-                {selectedModalidades.length > 0 && (
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={showModalidadeComparison}
-                      onChange={(e) => setShowModalidadeComparison(e.target.checked)}
-                      className="w-4 h-4 text-[var(--brand-wine-dark)] border-gray-300 rounded focus:ring-[var(--brand-wine)]"
-                    />
-                    Comparar modalidades selecionadas
-                  </label>
-                )}
-                {selectedPortes.length > 0 && (
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={showPorteComparison}
-                      onChange={(e) => setShowPorteComparison(e.target.checked)}
-                      className="w-4 h-4 text-[var(--brand-wine-dark)] border-gray-300 rounded focus:ring-[var(--brand-wine)]"
-                    />
-                    Comparar portes selecionados
-                  </label>
-                )}
-              </div>
-            )}
-
             <ResponsiveContainer width="100%" height={320}>
               <LineChart data={timelineData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -441,120 +195,49 @@ export function ComparisonSection({
                   labelFormatter={(label) => `Ano: ${label}`}
                 />
                 <Legend />
-                {selectedOperadoras.map((regAns, index) => (
+                {selectedOperadora && (
                   <Line
-                    key={regAns}
                     type="monotone"
-                    dataKey={regAns}
-                    name={operadoraLabelMap.get(regAns) || regAns}
-                    stroke={COLORS[index % COLORS.length]}
+                    dataKey="selected"
+                    name={selectedLabel || 'Operadora'}
+                    stroke="var(--brand-wine-dark)"
                     strokeWidth={3}
                     dot={{ r: 3 }}
                     activeDot={{ r: 5 }}
                   />
-                ))}
-                {modalidadeSeries.map((series, index) => (
-                  <Line
-                    key={series.key}
-                    type="monotone"
-                    dataKey={series.key}
-                    name={series.label}
-                    stroke={series.color || GROUP_COLORS[index % GROUP_COLORS.length]}
-                    strokeWidth={2}
-                    strokeDasharray="6 4"
-                    dot={false}
-                  />
-                ))}
-                {porteSeries.map((series, index) => (
-                  <Line
-                    key={series.key}
-                    type="monotone"
-                    dataKey={series.key}
-                    name={series.label}
-                    stroke={series.color || GROUP_COLORS[(index + modalidadeSeries.length) % GROUP_COLORS.length]}
-                    strokeWidth={2}
-                    strokeDasharray="6 4"
-                    dot={false}
-                  />
-                ))}
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="group"
+                  name="Media do grupo"
+                  stroke="var(--brand-roxo)"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg text-gray-800">Comparacao de IDSS</h3>
-              {snapshotLabel && (
-                <span className="text-sm text-gray-500">Ano: {snapshotLabel}</span>
+              <h3 className="text-lg text-gray-800">Comparacao por Indice</h3>
+              {selectedYear && (
+                <span className="text-sm text-gray-500">Ano: {selectedYear}</span>
               )}
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={combinedComparisonData}>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={comparisonIndices}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" interval={0} />
+                <XAxis dataKey="index" />
                 <YAxis domain={[0, 1]} />
-                <Tooltip
-                  formatter={(value: number) => value.toFixed(4)}
-                  labelFormatter={(label) => {
-                    const item = combinedComparisonData.find(d => d.name === label);
-                    return item?.fullName || label;
-                  }}
-                />
+                <Tooltip formatter={(value: number | null) => (value ?? 0).toFixed(4)} />
                 <Legend />
-                <Bar dataKey="idss" fill="var(--brand-wine-dark)" name="IDSS" />
+                {selectedOperadora && (
+                  <Bar dataKey="operadora" fill="var(--brand-wine-dark)" name={selectedLabel || 'Operadora'} />
+                )}
+                <Bar dataKey="media" fill="var(--brand-roxo)" name="Media do grupo" />
               </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg text-gray-800">Comparacao de Todos os Indices</h3>
-              {snapshotLabel && (
-                <span className="text-sm text-gray-500">Ano: {snapshotLabel}</span>
-              )}
-            </div>
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={combinedComparisonData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" interval={0} />
-                <YAxis domain={[0, 1]} />
-                <Tooltip
-                  formatter={(value: number) => value.toFixed(4)}
-                  labelFormatter={(label) => {
-                    const item = combinedComparisonData.find(d => d.name === label);
-                    return item?.fullName || label;
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="idss" fill="var(--brand-wine-dark)" name="IDSS" />
-                <Bar dataKey="idqs" fill="var(--brand-wine)" name="IDQS" />
-                <Bar dataKey="idga" fill="var(--brand-wine-light)" name="IDGA" />
-                <Bar dataKey="idsm" fill="var(--brand-goiaba)" name="IDSM" />
-                <Bar dataKey="idgr" fill="var(--brand-roxo)" name="IDGR" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg mb-4 text-gray-800">Comparacao Radar (Perfil de Desempenho)</h3>
-            <ResponsiveContainer width="100%" height={400}>
-              <RadarChart data={radarComparisonData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="subject" />
-                <PolarRadiusAxis angle={90} domain={[0, 1]} />
-                {combinedComparisonData.map((item, index) => (
-                  <Radar
-                    key={item.seriesKey}
-                    name={item.displayName}
-                    dataKey={item.seriesKey}
-                    stroke={COLORS[index % COLORS.length]}
-                    fill={COLORS[index % COLORS.length]}
-                    fillOpacity={0.3}
-                  />
-                ))}
-                <Tooltip formatter={(value: number) => value.toFixed(4)} />
-                <Legend />
-              </RadarChart>
             </ResponsiveContainer>
           </div>
 
@@ -576,27 +259,70 @@ export function ComparisonSection({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {combinedComparisonData.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.fullName}</td>
-                      <td className="px-4 py-3 text-center text-sm text-gray-700">{item.ano || '-'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm font-medium text-[var(--brand-wine-dark)]">{item.idss.toFixed(4)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-gray-700">{item.idqs.toFixed(4)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-gray-700">{item.idga.toFixed(4)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-gray-700">{item.idsm.toFixed(4)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm text-gray-700">{item.idgr.toFixed(4)}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedOperadora && selectedSnapshot ? (
+                    [
+                      {
+                        label: selectedOperadora.razao_social,
+                        ano: selectedSnapshot.ano,
+                        idss: selectedSnapshot.idss,
+                        idqs: selectedSnapshot.idqs,
+                        idga: selectedSnapshot.idga,
+                        idsm: selectedSnapshot.idsm,
+                        idgr: selectedSnapshot.idgr
+                      },
+                      {
+                        label: 'Media do grupo',
+                        ano: selectedYear || selectedSnapshot.ano,
+                        idss: calculateAverage(comparisonTargets, 'idss'),
+                        idqs: calculateAverage(comparisonTargets, 'idqs'),
+                        idga: calculateAverage(comparisonTargets, 'idga'),
+                        idsm: calculateAverage(comparisonTargets, 'idsm'),
+                        idgr: calculateAverage(comparisonTargets, 'idgr')
+                      }
+                    ].map((row, index) => (
+                      <tr key={`summary-${index}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{row.label}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-700">{row.ano || '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm font-medium text-[var(--brand-wine-dark)]">{(row.idss ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(row.idqs ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(row.idga ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(row.idsm ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(row.idgr ?? 0).toFixed(4)}</span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    comparisonTargets.map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.razao_social}</td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-700">{item.ano || '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm font-medium text-[var(--brand-wine-dark)]">{(item.idss ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(item.idqs ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(item.idga ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(item.idsm ?? 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700">{(item.idgr ?? 0).toFixed(4)}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -611,7 +337,7 @@ export function ComparisonSection({
           </div>
           <h3 className="text-lg text-gray-700 mb-2">Sem comparacoes disponiveis</h3>
           <p className="text-gray-500">
-            Selecione uma operadora na tabela ou use Modalidade/Porte para comparar medias.
+            Ajuste os filtros para montar o grupo de comparacao.
           </p>
         </div>
       )}

@@ -45,10 +45,7 @@ export function AdvancedFilters({ options, activeFilters, onFiltersChange, onCle
   };
 
   const hasActiveFilters = 
-    activeFilters.anos.length > 0 ||
     activeFilters.modalidades.length > 0 ||
-    activeFilters.razoesSociais.length > 0 ||
-    activeFilters.numerosANS.length > 0 ||
     activeFilters.portes.length > 0 ||
     activeFilters.uniodontos.length > 0 ||
     activeFilters.idssMin > options.idssRange.min ||
@@ -64,8 +61,8 @@ export function AdvancedFilters({ options, activeFilters, onFiltersChange, onCle
           <div className="flex items-center gap-3">
             <Filter className="w-5 h-5 text-[var(--brand-wine-dark)]" />
             <div>
-              <h3 className="font-semibold text-gray-900">Filtros Avançados</h3>
-              <p className="text-xs text-gray-600">Combine múltiplos filtros para análise detalhada</p>
+              <h3 className="font-semibold text-gray-900">Filtros para comparação</h3>
+              <p className="text-xs text-gray-600">Refine os grupos para comparar com a operadora selecionada</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -96,33 +93,6 @@ export function AdvancedFilters({ options, activeFilters, onFiltersChange, onCle
       {isExpanded && (
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-1 gap-4">
-            <MultiSelectDropdown
-              label="Nº ANS"
-              options={options.numerosANS}
-              selected={activeFilters.numerosANS}
-              onChange={(values) => onFiltersChange({ ...activeFilters, numerosANS: values })}
-              searchable
-              searchPlaceholder="Buscar Nº ANS..."
-            />
-            <MultiSelectDropdown
-              label="Razão Social"
-              options={options.razoesSociais}
-              selected={activeFilters.razoesSociais}
-              onChange={(values) => onFiltersChange({ ...activeFilters, razoesSociais: values })}
-              searchable
-              searchPlaceholder="Buscar razão social..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            <MultiSelectDropdown
-              label="Anos"
-              options={options.anos}
-              selected={activeFilters.anos}
-              onChange={(values) => onFiltersChange({ ...activeFilters, anos: values })}
-              singleSelect
-            />
-
             <MultiSelectDropdown
               label="Modalidades"
               options={options.modalidades}
@@ -235,16 +205,6 @@ export function AdvancedFilters({ options, activeFilters, onFiltersChange, onCle
           <div className="bg-[var(--brand-wine-soft)] border border-[var(--brand-border)] rounded-lg p-4">
             <p className="text-sm text-[var(--brand-wine-ultra)] font-medium mb-2">Filtros Ativos:</p>
             <div className="flex flex-wrap gap-2">
-              {activeFilters.anos.map(ano => (
-                <ActiveFilterBadge
-                  key={`ano-${ano}`}
-                  label={`Ano: ${ano}`}
-                  onRemove={() => {
-                    const updated = activeFilters.anos.filter(a => a !== ano);
-                    onFiltersChange({ ...activeFilters, anos: updated });
-                  }}
-                />
-              ))}
               {activeFilters.modalidades.map(mod => (
                 <ActiveFilterBadge
                   key={`mod-${mod}`}
@@ -252,26 +212,6 @@ export function AdvancedFilters({ options, activeFilters, onFiltersChange, onCle
                   onRemove={() => {
                     const updated = activeFilters.modalidades.filter(m => m !== mod);
                     onFiltersChange({ ...activeFilters, modalidades: updated });
-                  }}
-                />
-              ))}
-              {activeFilters.numerosANS.map(numero => (
-                <ActiveFilterBadge
-                  key={`ans-${numero}`}
-                  label={`Nº ANS: ${numero}`}
-                  onRemove={() => {
-                    const updated = activeFilters.numerosANS.filter(o => o !== numero);
-                    onFiltersChange({ ...activeFilters, numerosANS: updated });
-                  }}
-                />
-              ))}
-              {activeFilters.razoesSociais.map(razao => (
-                <ActiveFilterBadge
-                  key={`razao-${razao}`}
-                  label={`Razão Social: ${razao}`}
-                  onRemove={() => {
-                    const updated = activeFilters.razoesSociais.filter(r => r !== razao);
-                    onFiltersChange({ ...activeFilters, razoesSociais: updated });
                   }}
                 />
               ))}

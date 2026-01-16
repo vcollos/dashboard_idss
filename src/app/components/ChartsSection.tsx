@@ -1,11 +1,29 @@
-import { IDSSData, groupByField, calculateAverage, getTopPerformers } from '../utils/csvParser';
-import { BarChart, Bar, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { IDSSData, groupByField, calculateAverage } from '../utils/csvParser';
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
 
 interface ChartsSectionProps {
   data: IDSSData[];
+  selectedOperadora?: IDSSData;
 }
 
-export function ChartsSection({ data }: ChartsSectionProps) {
+export function ChartsSection({ data, selectedOperadora }: ChartsSectionProps) {
   const contextoDimensoes = [
     {
       titulo: 'IDQS',
@@ -33,7 +51,6 @@ export function ChartsSection({ data }: ChartsSectionProps) {
     '2.9 Tratamento Endodôntico'
   ];
 
-  // Data for modalidade distribution
   const modalidadeData = Object.entries(groupByField(data, 'modalidade_operadora')).map(([name, value]) => ({
     name,
     value
@@ -44,70 +61,94 @@ export function ChartsSection({ data }: ChartsSectionProps) {
     value
   }));
 
-  // Average indices comparison
-  const avgIndices = [
-    { index: 'IDQS', value: calculateAverage(data, 'idqs') },
-    { index: 'IDGA', value: calculateAverage(data, 'idga') },
-    { index: 'IDSM', value: calculateAverage(data, 'idsm') },
-    { index: 'IDGR', value: calculateAverage(data, 'idgr') }
+  const selectedSnapshot = selectedOperadora
+    ? data.find(item => item.reg_ans === selectedOperadora.reg_ans)
+    : undefined;
+
+  const comparisonGroup = selectedOperadora
+    ? data.filter(item => item.reg_ans !== selectedOperadora.reg_ans)
+    : data;
+
+  const comparisonIndices = [
+    { index: 'IDSS', operadora: selectedSnapshot?.idss ?? null, media: calculateAverage(comparisonGroup, 'idss') },
+    { index: 'IDQS', operadora: selectedSnapshot?.idqs ?? null, media: calculateAverage(comparisonGroup, 'idqs') },
+    { index: 'IDGA', operadora: selectedSnapshot?.idga ?? null, media: calculateAverage(comparisonGroup, 'idga') },
+    { index: 'IDSM', operadora: selectedSnapshot?.idsm ?? null, media: calculateAverage(comparisonGroup, 'idsm') },
+    { index: 'IDGR', operadora: selectedSnapshot?.idgr ?? null, media: calculateAverage(comparisonGroup, 'idgr') }
   ];
 
-  // Top 10 performers
-  const topPerformers = getTopPerformers(data, 10)
-    .filter(item => item.razao_social) // Filter out items without name
-    .map(item => ({
-      name: (item.razao_social || 'N/A').substring(0, 30),
-      idss: item.idss ?? 0,
-      idqs: item.idqs ?? 0,
-      idga: item.idga ?? 0,
-      idsm: item.idsm ?? 0,
-      idgr: item.idgr ?? 0
-    }));
+  const radarData = [
+    {
+      subject: 'IDQS',
+      operadora: selectedSnapshot?.idqs ?? 0,
+      media: calculateAverage(comparisonGroup, 'idqs')
+    },
+    {
+      subject: 'IDGA',
+      operadora: selectedSnapshot?.idga ?? 0,
+      media: calculateAverage(comparisonGroup, 'idga')
+    },
+    {
+      subject: 'IDSM',
+      operadora: selectedSnapshot?.idsm ?? 0,
+      media: calculateAverage(comparisonGroup, 'idsm')
+    },
+    {
+      subject: 'IDGR',
+      operadora: selectedSnapshot?.idgr ?? 0,
+      media: calculateAverage(comparisonGroup, 'idgr')
+    }
+  ];
+
+  const rankedPerformers = [...data]
+    .filter(item => item.razao_social)
+    .sort((a, b) => (b.idss ?? 0) - (a.idss ?? 0));
+
+  const selectedRankIndex = selectedOperadora
+    ? rankedPerformers.findIndex(item => item.reg_ans === selectedOperadora.reg_ans)
+    : -1;
+  const selectedRank = selectedRankIndex >= 0 ? selectedRankIndex + 1 : null;
+
+  const topPerformersBase = rankedPerformers.slice(0, 10).map((item, index) => ({
+    name: item.razao_social || 'N/A',
+    idss: item.idss ?? 0,
+    rank: index + 1,
+    isSelected: selectedOperadora?.reg_ans === item.reg_ans,
+    fullName: item.razao_social || 'N/A',
+    modalidadeIdss: item.modalidade_idss || '-',
+    modalidadeOperadora: item.modalidade_operadora || '-'
+  }));
+
+  let topPerformers = topPerformersBase;
+  if (selectedOperadora && selectedRank && selectedRank > 10) {
+    const selectedItem = rankedPerformers[selectedRankIndex];
+    if (selectedItem) {
+      topPerformers = [
+        ...topPerformersBase,
+        {
+          name: selectedItem.razao_social || 'N/A',
+          idss: selectedItem.idss ?? 0,
+          rank: selectedRank,
+          isSelected: true,
+          fullName: selectedItem.razao_social || 'N/A',
+          modalidadeIdss: selectedItem.modalidade_idss || '-',
+          modalidadeOperadora: selectedItem.modalidade_operadora || '-'
+        }
+      ];
+    }
+  }
+
   const topPerformersMin = topPerformers.length > 0
     ? Math.max(0, Math.min(...topPerformers.map(item => item.idss)))
     : 0;
 
-  // Radar chart data - average of indices
-  const radarData = [
-    { subject: 'IDQS', A: calculateAverage(data, 'idqs'), fullMark: 1 },
-    { subject: 'IDGA', A: calculateAverage(data, 'idga'), fullMark: 1 },
-    { subject: 'IDSM', A: calculateAverage(data, 'idsm'), fullMark: 1 },
-    { subject: 'IDGR', A: calculateAverage(data, 'idgr'), fullMark: 1 }
-  ];
-
-  const rankingByPorte = () => {
-    const grouped: Record<string, { sum: number; count: number }> = {};
-
-    data.forEach(item => {
-      const porte = item.porte || 'Não informado';
-      const idss = item.idss;
-
-      if (typeof idss === 'number' && !isNaN(idss)) {
-        if (!grouped[porte]) {
-          grouped[porte] = { sum: 0, count: 0 };
-        }
-        grouped[porte].sum += idss;
-        grouped[porte].count += 1;
-      }
-    });
-
-    return Object.entries(grouped)
-      .map(([name, { sum, count }]) => ({
-        porte: name,
-        idss: parseFloat((sum / count).toFixed(4)),
-        operadoras: count
-      }))
-      .sort((a, b) => b.idss - a.idss);
-  };
-
-  // Ranking by Modalidade - Calculate average IDSS for each modalidade
   const rankingByModalidade = () => {
     const grouped: Record<string, { sum: number; count: number }> = {};
-    
+
     data.forEach(item => {
       const modalidade = item.modalidade_operadora || 'Não informado';
       const idss = item.idss;
-      
+
       if (typeof idss === 'number' && !isNaN(idss)) {
         if (!grouped[modalidade]) {
           grouped[modalidade] = { sum: 0, count: 0 };
@@ -127,7 +168,6 @@ export function ChartsSection({ data }: ChartsSectionProps) {
   };
 
   const modalidadeRanking = rankingByModalidade();
-  const porteRanking = rankingByPorte();
 
   const COLORS = [
     '#810e56',
@@ -142,7 +182,6 @@ export function ChartsSection({ data }: ChartsSectionProps) {
 
   return (
     <div className="space-y-6">
-      {/* Contexto IDSS */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col gap-3">
           <div>
@@ -160,7 +199,7 @@ export function ChartsSection({ data }: ChartsSectionProps) {
             ))}
           </div>
           <div className="bg-[var(--brand-peach-soft)] rounded-lg p-4 border border-[var(--brand-border)]">
-            <p className="text-sm font-semibold text-[var(--brand-wine-ultra)]">Indicadores odontologicos mais relevantes</p>
+            <p className="text-sm font-semibold text-[var(--brand-wine-ultra)]">Indicadores odontológicos mais relevantes</p>
             <p className="text-sm text-gray-600">
               {indicadoresOdonto.join(' • ')}.
             </p>
@@ -168,19 +207,18 @@ export function ChartsSection({ data }: ChartsSectionProps) {
         </div>
       </div>
 
-      {/* Row 1 - Distribution and Radar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg mb-4 text-gray-800">Distribuição por Modalidade</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={420}>
             <PieChart>
               <Pie
                 data={modalidadeData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name.substring(0, 20)}: ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
+                label={({ name, percent }) => `${name.substring(0, 24)}: ${(percent * 100).toFixed(0)}%`}
+                outerRadius={110}
                 fill="#810e56"
                 dataKey="value"
               >
@@ -194,63 +232,28 @@ export function ChartsSection({ data }: ChartsSectionProps) {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg mb-4 text-gray-800">Visão Geral dos Índices (Médias)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="subject" />
-              <PolarRadiusAxis angle={90} domain={[0, 1]} />
-              <Radar name="Média" dataKey="A" stroke="#810e56" fill="#810e56" fillOpacity={0.6} />
-              <Tooltip formatter={(value: number) => value.toFixed(4)} />
-              <Legend />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Row 2 - Top Performers and Average Indices */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg mb-4 text-gray-800">Top 10 Operadoras por IDSS</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={topPerformers} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" domain={[topPerformersMin, 1]} />
-              <YAxis dataKey="name" type="category" width={150} />
-              <Tooltip formatter={(value: number) => value.toFixed(4)} />
-              <Bar dataKey="idss" name="IDSS">
-                {topPerformers.map((entry, index) => (
-                  <Cell key={`top-${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg mb-4 text-gray-800">Comparação de Índices Médios</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={avgIndices}>
+          <h3 className="text-lg mb-1 text-gray-800">Comparação dos índices médios</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            {selectedOperadora ? 'Operadora selecionada vs média do grupo filtrado.' : 'Média do grupo filtrado.'}
+          </p>
+          <ResponsiveContainer width="100%" height={420}>
+            <BarChart data={comparisonIndices}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="index" />
               <YAxis domain={[0, 1]} />
-              <Tooltip formatter={(value: number) => value.toFixed(4)} />
+              <Tooltip formatter={(value: number | null) => (value ?? 0).toFixed(4)} />
               <Legend />
-              <Bar dataKey="value" name="Média">
-                {avgIndices.map((entry, index) => (
-                  <Cell key={`avg-${entry.index}-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
+              {selectedOperadora && (
+                <Bar dataKey="operadora" fill="var(--brand-wine-dark)" name="Operadora" />
+              )}
+              <Bar dataKey="media" fill="var(--brand-roxo)" name="Média do grupo" />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
 
-      {/* Row 3 - Porte */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg mb-4 text-gray-800">Distribuicao por Porte</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          <h3 className="text-lg mb-4 text-gray-800">Distribuição por Porte</h3>
+          <ResponsiveContainer width="100%" height={420}>
             <PieChart>
               <Pie
                 data={porteData}
@@ -258,7 +261,7 @@ export function ChartsSection({ data }: ChartsSectionProps) {
                 cy="50%"
                 labelLine={false}
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
+                outerRadius={110}
                 fill="#810e56"
                 dataKey="value"
               >
@@ -272,34 +275,105 @@ export function ChartsSection({ data }: ChartsSectionProps) {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg mb-4 text-gray-800">Media de IDSS por Porte</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={porteRanking} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" domain={[0.5, 1]} />
-              <YAxis dataKey="porte" type="category" width={140} />
+          <h3 className="text-lg mb-2 text-gray-800">Análise dos índices por radar</h3>
+          <p className="text-sm text-gray-600 mb-4">
+          {selectedOperadora ? 'Operadora selecionada vs média das outras operadoras filtradas.' : 'Média das operadoras filtradas.'}
+          </p>
+          <ResponsiveContainer width="100%" height={420}>
+            <RadarChart data={radarData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="subject" />
+              <PolarRadiusAxis angle={90} domain={[0, 1]} />
+              {selectedOperadora && (
+                <Radar name="Operadora" dataKey="operadora" stroke="var(--brand-wine-dark)" fill="var(--brand-wine-dark)" fillOpacity={0.4} />
+              )}
+              <Radar name="Média do grupo" dataKey="media" stroke="var(--brand-roxo)" fill="var(--brand-roxo)" fillOpacity={0.25} />
               <Tooltip formatter={(value: number) => value.toFixed(4)} />
               <Legend />
-              <Bar dataKey="idss" name="IDSS Medio">
-                {porteRanking.map((entry, index) => (
-                  <Cell key={`porte-${entry.porte}-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
+            </RadarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Row 4 - Ranking IDSS por Modalidade */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg mb-4 text-gray-800">🏆 Ranking de Notas por Modalidade</h3>
+        <h3 className="text-lg mb-4 text-gray-800">Top 10 operadoras por IDSS</h3>
+        <ResponsiveContainer width="100%" height={420}>
+          <BarChart data={topPerformers} layout="vertical">
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" domain={[topPerformersMin, 1]} />
+            <YAxis dataKey="fullName" type="category" width={320} />
+            <Tooltip
+              formatter={(value: number) => value.toFixed(4)}
+              labelFormatter={(label) => {
+                const entry = topPerformers.find(item => item.fullName === label);
+                if (!entry) return label;
+                return `${entry.fullName} (Rank ${entry.rank})`;
+              }}
+            />
+            <Bar dataKey="idss" name="IDSS">
+              {topPerformers.map((entry, index) => (
+                <Cell
+                  key={`top-${entry.fullName}-${index}`}
+                  fill={entry.isSelected ? 'var(--brand-wine-ultra)' : COLORS[index % COLORS.length]}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+        {selectedOperadora && selectedRank && selectedRank > 10 && (
+          <p className="text-xs text-gray-500 mt-3">
+            Operadora selecionada aparece na posição {selectedRank} do filtro de comparação.
+          </p>
+        )}
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">#</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Modalidade IDSS</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Modalidade</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Operadora</th>
+                <th className="px-4 py-2 text-center text-xs font-medium text-gray-600 uppercase">IDSS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {topPerformers.map((item, index) => (
+                <tr key={item.fullName + index} className={item.isSelected ? 'bg-[var(--brand-wine-soft)]' : 'hover:bg-gray-50 transition-colors'}>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                      item.rank === 1 ? 'bg-yellow-400 text-yellow-900' :
+                      item.rank === 2 ? 'bg-gray-300 text-gray-800' :
+                      item.rank === 3 ? 'bg-orange-400 text-orange-900' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {item.rank}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">{item.modalidadeIdss}</td>
+                  <td className="px-4 py-3 text-gray-700">{item.modalidadeOperadora}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{item.fullName}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex items-center px-2 py-1 bg-[var(--brand-wine-soft)] text-[var(--brand-wine-ultra)] rounded-lg font-medium">
+                      {item.idss.toFixed(4)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg mb-4 text-gray-800">🏆 Ranking de notas por modalidade</h3>
         <p className="text-sm text-gray-600 mb-4">Média do IDSS por modalidade de operadora (do maior para o menor)</p>
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={modalidadeRanking} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" domain={[0.5, 1]} />
             <YAxis dataKey="modalidade" type="category" width={200} />
-            <Tooltip 
+            <Tooltip
               formatter={(value: number, name: string) => {
                 if (name === 'idss') return [value.toFixed(4), 'IDSS Médio'];
                 if (name === 'operadoras') return [value, 'Operadoras'];
@@ -314,8 +388,7 @@ export function ChartsSection({ data }: ChartsSectionProps) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        
-        {/* Stats Table */}
+
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
