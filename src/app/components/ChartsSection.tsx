@@ -287,7 +287,7 @@ export function ChartsSection({ data, selectedOperadora }: ChartsSectionProps) {
               {selectedOperadora && (
                 <Radar name="Operadora" dataKey="operadora" stroke="var(--brand-wine-dark)" fill="var(--brand-wine-dark)" fillOpacity={0.4} />
               )}
-              <Radar name="Média do grupo" dataKey="media" stroke="var(--brand-roxo)" fill="var(--brand-roxo)" fillOpacity={0.25} />
+            <Radar name="Média do grupo" dataKey="media" stroke="#550039" fill="#550039" fillOpacity={0.25} />
               <Tooltip formatter={(value: number) => value.toFixed(4)} />
               <Legend />
             </RadarChart>
