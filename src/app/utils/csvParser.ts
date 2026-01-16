@@ -31,9 +31,20 @@ export const normalizeTextValue = (value: unknown): string => {
 export const parseIndicatorValue = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const normalized = String(value).trim().replace(',', '.');
+  const raw = String(value).trim();
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const decimalSeparator = lastComma > lastDot ? ',' : '.';
+  const normalized = raw
+    .replace(new RegExp(`[^0-9${decimalSeparator}]`, 'g'), '')
+    .replace(decimalSeparator, '.');
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed)) return null;
+  let scaled = parsed;
+  while (scaled > 1) {
+    scaled /= 10;
+  }
+  return scaled;
 };
 
 export const parseIntegerValue = (value: unknown): number | null => {
