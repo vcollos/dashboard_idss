@@ -52,21 +52,28 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
   }, [data, searchTerm, sortKey, sortDirection]);
 
   const rankedByIdss = useMemo(() => {
-    return [...data].sort((a, b) => {
+    const uniqueByOperadora = new Map<string, IDSSData>();
+    data.forEach(item => {
+      if (!item.reg_ans) return;
+      const existing = uniqueByOperadora.get(item.reg_ans);
+      if (!existing || (item.idss ?? 0) > (existing.idss ?? 0)) {
+        uniqueByOperadora.set(item.reg_ans, item);
+      }
+    });
+
+    return Array.from(uniqueByOperadora.values()).sort((a, b) => {
       const scoreDiff = (b.idss ?? 0) - (a.idss ?? 0);
       if (scoreDiff !== 0) return scoreDiff;
       const nameDiff = (a.razao_social || '').localeCompare(b.razao_social || '');
       if (nameDiff !== 0) return nameDiff;
-      const regDiff = (a.reg_ans || '').localeCompare(b.reg_ans || '');
-      if (regDiff !== 0) return regDiff;
-      return (a.ano || '').localeCompare(b.ano || '');
+      return (a.reg_ans || '').localeCompare(b.reg_ans || '');
     });
   }, [data]);
 
   const rankByKey = useMemo(() => {
     const map = new Map<string, number>();
     rankedByIdss.forEach((item, index) => {
-      map.set(`${item.reg_ans}-${item.ano}`, index + 1);
+      map.set(item.reg_ans, index + 1);
     });
     return map;
   }, [rankedByIdss]);
@@ -100,7 +107,7 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
   const dataWithRank = useMemo(() => {
     return paginatedData.map(item => ({
       ...item,
-      calculatedRank: rankByKey.get(`${item.reg_ans}-${item.ano}`) ?? 0
+      calculatedRank: rankByKey.get(item.reg_ans) ?? 0
     }));
   }, [paginatedData, rankByKey]);
 
@@ -180,7 +187,7 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
                         'text-orange-600'
                       }`} />
                     )}
-                    <span className="text-gray-900">{item.calculatedRank}</span>
+                    <span className="text-gray-900">{item.calculatedRank || '-'}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-900">
