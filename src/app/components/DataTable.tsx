@@ -12,7 +12,6 @@ type SortDirection = 'asc' | 'desc';
 
 export function DataTable({ data, onSelectOperadora }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [locatorTerm, setLocatorTerm] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('idss');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,7 +52,15 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
   }, [data, searchTerm, sortKey, sortDirection]);
 
   const rankedByIdss = useMemo(() => {
-    return [...data].sort((a, b) => (b.idss ?? 0) - (a.idss ?? 0));
+    return [...data].sort((a, b) => {
+      const scoreDiff = (b.idss ?? 0) - (a.idss ?? 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const nameDiff = (a.razao_social || '').localeCompare(b.razao_social || '');
+      if (nameDiff !== 0) return nameDiff;
+      const regDiff = (a.reg_ans || '').localeCompare(b.reg_ans || '');
+      if (regDiff !== 0) return regDiff;
+      return (a.ano || '').localeCompare(b.ano || '');
+    });
   }, [data]);
 
   const rankByKey = useMemo(() => {
@@ -63,26 +70,6 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
     });
     return map;
   }, [rankedByIdss]);
-
-  const locatorResult = useMemo(() => {
-    const term = locatorTerm.trim().toLowerCase();
-    if (!term) return null;
-    const match = rankedByIdss.find(item => {
-      const nameMatch = item.razao_social?.toLowerCase().includes(term);
-      const regMatch = item.reg_ans?.toString().includes(term);
-      const cnpjMatch = item.cnpj?.toString().includes(term);
-      return nameMatch || regMatch || cnpjMatch;
-    });
-    if (!match) return null;
-    const key = `${match.reg_ans}-${match.ano}`;
-    const rank = rankByKey.get(key) ?? rankedByIdss.findIndex(item => item.reg_ans === match.reg_ans && item.ano === match.ano) + 1;
-    return {
-      item: match,
-      key,
-      rank,
-      page: Math.ceil(rank / itemsPerPage)
-    };
-  }, [locatorTerm, rankedByIdss, rankByKey]);
 
   const totalPages = Math.ceil(filteredAndSortedData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -120,7 +107,7 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Search */}
-      <div className="p-4 border-b border-gray-200 space-y-3">
+      <div className="p-4 border-b border-gray-200">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Filtro (reduz a tabela)</label>
           <div className="relative">
@@ -137,44 +124,6 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
             />
           </div>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Localizador de posicao no ranking (por IDSS)</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Digite Razao Social, CNPJ ou numero ANS..."
-                value={locatorTerm}
-                onChange={(e) => setLocatorTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--brand-wine)] focus:border-transparent"
-              />
-            </div>
-            {locatorResult ? (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span>
-                  Posicao: <span className="font-semibold text-[var(--brand-wine-ultra)]">#{locatorResult.rank}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortKey('idss');
-                    setSortDirection('desc');
-                    setSearchTerm('');
-                    setCurrentPage(locatorResult.page);
-                  }}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-                >
-                  Ir para pagina {locatorResult.page}
-                </button>
-              </div>
-            ) : (
-              locatorTerm.trim() !== '' && (
-                <span className="text-sm text-gray-500">Nenhum resultado encontrado.</span>
-              )
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Table */}
@@ -183,7 +132,7 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-4 py-3 text-left text-sm text-gray-700">
-                Rank
+                Rank (IDSS)
               </th>
               <th className="px-4 py-3 text-left text-sm text-gray-700">
                 <SortButton columnKey="razao_social" label="Razão Social" />
@@ -217,11 +166,10 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
           <tbody className="divide-y divide-gray-200">
             {dataWithRank.map((item) => {
               const rowKey = `${item.reg_ans}-${item.ano}`;
-              const isLocatorMatch = locatorResult?.key === rowKey;
               return (
               <tr
                 key={rowKey}
-                className={`hover:bg-gray-50 transition-colors ${isLocatorMatch ? 'bg-[var(--brand-peach-soft)]' : ''}`}
+                className="hover:bg-gray-50 transition-colors"
                 onClick={() => onSelectOperadora?.(item)}
               >
                 <td className="px-4 py-3 text-sm">
