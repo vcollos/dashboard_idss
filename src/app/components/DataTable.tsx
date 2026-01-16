@@ -170,7 +170,6 @@ export function DataTable({ data, onSelectOperadora }: DataTableProps) {
               <tr
                 key={rowKey}
                 className="hover:bg-gray-50 transition-colors"
-                onClick={() => onSelectOperadora?.(item)}
               >
                 <td className="px-4 py-3 text-sm">
                   <div className="flex items-center gap-2">
